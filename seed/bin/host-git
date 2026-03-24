@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Container-side gateway to the host-bridge.
+# Usage: host-git <git-subcommand> [args...]
+# Requires host bridge running (sandbox --bridge on host)
+
+HOST=host.docker.internal
+PORT=57421
+
+# Test connectivity using bash built-in TCP (no data sent, no handler spawned)
+if ! (exec 3<>/dev/tcp/"$HOST"/"$PORT") 2>/dev/null; then
+  echo "ERROR: host bridge not running. Start the sandbox with: sandbox --bridge" >&2
+  exit 1
+fi
+
+# Open a persistent TCP connection, send null-delimited args + empty sentinel,
+# then read all server output until the server closes the connection.
+# Using bash /dev/tcp directly avoids socat relay issues with long-running commands.
+exec 3<>/dev/tcp/"$HOST"/"$PORT"
+printf '%s\0' "$@" >&3
+printf '\0' >&3
+cat <&3
+exec 3>&-

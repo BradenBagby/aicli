@@ -76,6 +76,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     tmux \
     tree \
     rsync \
+    socat \
     sudo \
     tcpdump \
     unzip \

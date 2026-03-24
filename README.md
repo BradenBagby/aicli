@@ -32,20 +32,31 @@ Bootstrap contract:
 Do this in order:
 
 1. Clone this repo and `cd` into it.
-2. Generate a dedicated SSH key for sandbox use (do not reuse your normal SSH key):
+2. Choose a git mode — **bridge** (recommended, no SSH keys needed) or **SSH**:
+
+   **Bridge mode** (host runs git, container calls it via socket):
+   ```bash
+   brew install socat
+   ```
+
+   **SSH mode** (traditional, git runs inside container with your keys):
    ```bash
    ssh-keygen -t ed25519 -f ~/.ssh/ai_ed25519 -C "ai-sandbox" -N ""
+   # then add ~/.ssh/ai_ed25519.pub to your GitHub/GitLab account
    ```
+
 3. Build the image:
    ```bash
    docker build --build-arg GITCONFIG=$(base64 -i ~/.gitconfig) -t sandbox .
    ```
-4. Copy the `sandbox()` function from [Run Container](#run-container) into your shell startup file (`~/.bashrc`, `~/.zshrc`, or `~/.profile`).
+4. Copy the `sandbox()` function from [Run Container](#run-container) into your shell startup file (`~/.bashrc`, `~/.zshrc`, or `~/.profile`). If using bridge mode, also set `AICLI_HOME`.
 5. Source your startup file (for example, `source ~/.zshrc`).
 6. In your terminal, navigate to the project you want mounted into `/workspace`.
 7. Run:
    ```bash
-   sandbox
+   sandbox --bridge   # bridge mode
+   sandbox --ssh      # SSH mode
+   sandbox            # auto-detect (bridge if socket exists, else SSH)
    ```
 
 Do not run `./setup.sh` manually for normal use. The container entrypoint runs the required setup automatically when `sandbox` starts.
@@ -108,7 +119,8 @@ Add that export to your shell startup file (`~/.bashrc`, `~/.zshrc`, or `~/.prof
 ### Prerequisites
 
 - Docker installed and available in your shell
-- New SSH keys created specifically for AI use. See the [SSH Keys](#ssh-keys) section.
+- **Bridge mode**: `brew install socat` + set `AICLI_HOME` (see [Host Bridge](#host-bridge))
+- **SSH mode**: dedicated SSH keys — see the [SSH Keys](#ssh-keys) section
 - Optional: base64 support if passing `GITCONFIG` at build time
 
 ### Build Image
@@ -124,12 +136,70 @@ Notes:
 
 ### Run Container
 
-Add this helper to `~/.bashrc`, `~/.zshrc`, or `~/.profile`:
+Add this helper to `~/.bashrc`, `~/.zshrc`, or `~/.profile`.
+
+If using bridge mode, also set `AICLI_HOME` to the path where you cloned this repo:
 
 ```bash
-sandbox() {
-  docker network create sandbox >/dev/null 2>&1 || true
+export AICLI_HOME="$HOME/path/to/aicli"  # update to your clone path
 
+# Directories sandbox is allowed to mount. Subdirectories are also permitted.
+SANDBOX_ALLOWED_WORKSPACES=(
+  "$HOME/wavv-docker/core"
+  "$HOME/wavv-docker/prisma"
+)
+
+sandbox() {
+  # Workspace allowlist check
+  local current_dir
+  current_dir="$(pwd)"
+  local allowed=false
+  for allowed_dir in "${SANDBOX_ALLOWED_WORKSPACES[@]}"; do
+    if [[ "$current_dir" == "$allowed_dir" || "$current_dir" == "$allowed_dir/"* ]]; then
+      allowed=true
+      break
+    fi
+  done
+  if [[ "$allowed" == false ]]; then
+    echo "[sandbox] ERROR: '$current_dir' is not an allowed workspace."
+    echo "[sandbox] Allowed: ${SANDBOX_ALLOWED_WORKSPACES[*]}"
+    return 1
+  fi
+
+  local mode=""
+  for arg in "$@"; do
+    case "$arg" in
+      --bridge) mode=bridge ;;
+      --ssh)    mode=ssh ;;
+    esac
+  done
+
+  # Auto-detect if no flag given
+  if [[ -z "$mode" ]]; then
+    [[ -S /tmp/aih-bridge.sock ]] && mode=bridge || mode=ssh
+  fi
+
+  local extra_mounts=()
+  local bridge_pid=""
+
+  if [[ "$mode" == "bridge" ]]; then
+    rm -f /tmp/aih-bridge.sock
+    socat UNIX-LISTEN:/tmp/aih-bridge.sock,fork,mode=0666 \
+      EXEC:"bash '$AICLI_HOME/scripts/host-bridge-handler.sh' '$(pwd)'" &
+    bridge_pid=$!
+    sleep 0.3
+    echo "[sandbox] Bridge started (pid $bridge_pid) in $(pwd)"
+    extra_mounts+=(-v /tmp/aih-bridge.sock:/tmp/aih-bridge.sock)
+  else
+    extra_mounts+=(
+      -v "$HOME/.ssh/ai_ed25519:/home/ai/.ssh/id_ed25519:ro"
+      -v "$HOME/.ssh/ai_ed25519.pub:/home/ai/.ssh/id_ed25519.pub:ro"
+      -v "$HOME/.ssh/known_hosts:/home/ai/.ssh/known_hosts:ro"
+    )
+    echo "[sandbox] SSH mode"
+  fi
+
+  docker network create sandbox >/dev/null 2>&1 || true
   docker run --rm -it \
     --network sandbox \
     -v "sandbox_home:/home/ai" \
@@ -141,14 +211,19 @@ sandbox() {
     -v "sandbox_cursor:/home/ai/.cursor" \
     -v "sandbox_gemini:/home/ai/.gemini" \
     -v "sandbox_local:/home/ai/.local" \
-    #-v "$HOME/.ai/memory:/home/ai/.ai/memory" \ # Optional if you want your memories to persist onto your hard drive. Need create local folder first to use.
-    -v "$HOME/.ssh/ai_ed25519:/home/ai/.ssh/id_ed25519:ro" \
-    -v "$HOME/.ssh/ai_ed25519.pub:/home/ai/.ssh/id_ed25519.pub:ro" \
-    -v "$HOME/.ssh/known_hosts:/home/ai/.ssh/known_hosts:ro" \
+    # -v "$HOME/.ai/memory:/home/ai/.ai/memory" \ # Optional: persist memories to host disk
+    "${extra_mounts[@]}" \
     -v "$(pwd):/workspace" \
     --workdir /workspace \
     sandbox \
     /bin/bash
+
+  # Cleanup bridge when docker exits
+  if [[ -n "$bridge_pid" ]]; then
+    kill "$bridge_pid" 2>/dev/null
+    rm -f /tmp/aih-bridge.sock
+    echo "[sandbox] Bridge stopped"
+  fi
 }
 ```
 
@@ -312,6 +387,94 @@ wt --rm
 ```
 
 Worktrees are created under `.worktree/` which is automatically added to `.gitignore`.
+
+### Host Bridge
+
+Bridge mode lets the container run git commands on your host machine without SSH keys. The container calls `host-commit`, `host-pull`, etc. — these send requests through a Unix socket to a socat process running on your host, which executes the git command in your actual project directory.
+
+#### Prerequisites
+
+```bash
+brew install socat
+```
+
+Set `AICLI_HOME` in your shell startup file (alongside the `sandbox()` function):
+
+```bash
+export AICLI_HOME="$HOME/path/to/aicli"
+```
+
+#### Usage
+
+```bash
+cd ~/myproject
+sandbox --bridge
+# [sandbox] Bridge started (pid 12345) in /Users/you/myproject
+```
+
+Inside the container:
+
+```bash
+host-status           # git status (runs on host)
+host-pull             # git pull
+host-commit -m "fix"  # git commit -m "fix"
+host-push             # git push
+host-diff             # git diff
+host-log              # git log
+host-git fetch        # any allowlisted subcommand via host-git
+host-pr --title "feat: add login" --description "Adds OAuth login"  # open Bitbucket PR
+```
+
+#### Allowlisted Commands
+
+Only these commands are permitted through the bridge:
+
+`commit` `pull` `push` `fetch` `status` `log` `diff` `stash` `branch` `pr`
+
+Anything else (e.g. `host-git rebase`) returns an error and is not executed.
+
+#### Bitbucket PRs
+
+`host-pr` creates a pull request on Bitbucket via the REST API. Credentials never enter the container — they are read from a file on the host.
+
+**One-time setup:**
+
+```bash
+mkdir -p ~/.config/bitbucket
+cat > ~/.config/bitbucket/credentials <<'EOF'
+BITBUCKET_USERNAME="your-username"
+BITBUCKET_APP_PASSWORD="your-app-password"
+EOF
+chmod 600 ~/.config/bitbucket/credentials
+```
+
+Generate an app password at: Bitbucket → Personal settings → App passwords. Required scopes: `pullrequest:write`.
+
+**Usage:**
+
+```bash
+host-pr --title "feat: add login"
+host-pr --title "fix: null check" --description "Fixes #42" --dest develop
+host-pr --title "chore: update deps" --source feat/deps --dest main
+```
+
+- `--title` (required)
+- `--description` (optional)
+- `--source` (optional — defaults to current branch)
+- `--dest` (optional — auto-detects `main`/`master`/`develop`/`trunk` from remote)
+
+The workspace and repo slug are auto-detected from the `origin` remote URL. The PR URL is printed on success.
+
+#### How It Works
+
+1. `sandbox --bridge` starts `socat` in the background, listening on `/tmp/aih-bridge.sock`
+2. The socket is mounted into the container at the same path
+3. Container-side `host-*` commands send a one-line request (`COMMAND ARGS...`) to the socket
+4. `scripts/host-bridge-handler.sh` validates the command and runs `git` in your project directory
+5. Output is streamed back to the container
+6. When you exit the container, socat is killed and the socket is removed automatically
+
+---
 
 ### SSH Keys
 

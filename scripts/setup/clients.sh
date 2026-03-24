@@ -128,6 +128,13 @@ install_config_if_dir_exists \
   "Claude status line" \
   "curl -fsSL https://claude.ai/install.sh | bash"
 
+install_config_if_dir_exists \
+  "$SOURCE_CONFIG_DIR/claude_CLAUDE.md" \
+  "$HOME/.claude/CLAUDE.md" \
+  "$HOME/.claude" \
+  "Claude global CLAUDE.md" \
+  "curl -fsSL https://claude.ai/install.sh | bash"
+
 if [[ -f "$HOME/.claude/statusline.sh" && ! -x "$HOME/.claude/statusline.sh" ]]; then
   chmod u+x "$HOME/.claude/statusline.sh"
   log "Set executable permission on Claude status line: $HOME/.claude/statusline.sh"

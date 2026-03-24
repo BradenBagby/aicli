@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Create a Bitbucket pull request via the host bridge.
+# Usage: host-pr --title "My PR" [--description "..."] [--source branch] [--dest main]
+exec host-git pr "$@"
