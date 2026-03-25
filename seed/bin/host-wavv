@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Bridge wavv commands to the host.
+# Usage: host-wavv jest <module>
+#        host-wavv start
+#        host-wavv build
+#        host-wavv stop
+exec host-git wavv "$@"

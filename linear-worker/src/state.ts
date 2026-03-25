@@ -58,9 +58,8 @@ export class StateManager {
     const task = this.state.tasks[issueId];
     if (!task) return true; // Never seen before
     if (task.status === "in_progress") return false; // Already working on it
-    if (task.status === "completed") return false; // Already done
-    // Blocked tasks are only retried via the retry flow, not the pickup flow
-    if (task.status === "blocked") return false;
+    // Completed/blocked tasks CAN be re-picked up if they reappear in an
+    // actionable lane — the user explicitly moved them back.
     return true;
   }
 

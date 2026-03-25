@@ -40,8 +40,17 @@ async function main(): Promise<void> {
     `[linear-worker] Polling every ${config.pollInterval / 1000}s for tasks on team ${config.linearTeamId}`
   );
 
+  // Catch unhandled rejections so the process doesn't silently die
+  process.on("unhandledRejection", (err) => {
+    console.error("[linear-worker] Unhandled rejection:", err);
+  });
+
   // Initial poll immediately, then on interval
-  await pollLoop(config, linearClient, stateManager, taskRunner);
+  try {
+    await pollLoop(config, linearClient, stateManager, taskRunner);
+  } catch (err) {
+    console.error("[linear-worker] Initial poll error:", err);
+  }
 
   setInterval(async () => {
     try {

@@ -27,6 +27,10 @@ Use these instead of the equivalent `git` commands:
 | `git stash` | `host-git stash` |
 | `git branch` | `host-git branch` |
 | create a PR | `host-pr --title "..." [--description "..."]` |
+| run tests | `host-wavv jest <module>` or `host-wavv jest` |
+| start services | `host-wavv start` |
+| build | `host-wavv build` |
+| stop services | `host-wavv stop` |
 
 These accept the same arguments as their `git` equivalents (e.g. `host-commit -m "message"`, `host-push --set-upstream origin <branch>`).
 

@@ -4,7 +4,7 @@
 # Validates against allowlist and safety rules, runs git in workspace.
 
 WORKSPACE="${1:-.}"
-ALLOWLIST="add checkout reset commit pull push fetch status log diff stash branch show mv rm ls-files clean pr"
+ALLOWLIST="add checkout reset commit pull push fetch status log diff stash branch show mv rm ls-files clean pr wavv"
 PROTECTED_BRANCHES="main master develop trunk"
 LOG_FILE="${HOME}/.aih-bridge.log"
 BB_CREDS="${HOME}/.config/bitbucket/credentials"
@@ -176,6 +176,21 @@ print(json.dumps({
     deny "Bitbucket API error ($http_code): $error_msg"
   fi
   exit 0
+fi
+
+# --- wavv command ---
+if [[ "$cmd" == "wavv" ]]; then
+  WAVV_ALLOWLIST="jest start build stop"
+  wavv_subcmd="${rest_args[0]:-}"
+  wavv_allowed=false
+  for allowed in $WAVV_ALLOWLIST; do
+    [[ "$wavv_subcmd" == "$allowed" ]] && wavv_allowed=true && break
+  done
+  [[ "$wavv_allowed" == false ]] && deny "wavv subcommand '$wavv_subcmd' not allowed (allowed: $WAVV_ALLOWLIST)"
+  WAVV_CMD="${WAVV_CLI:-wavv}"
+  log
+  $WAVV_CMD "${rest_args[@]}" 2>&1
+  exit $?
 fi
 
 # --- Log and run git command ---

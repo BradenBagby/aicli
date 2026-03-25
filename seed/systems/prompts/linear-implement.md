@@ -15,10 +15,20 @@ You are working on a task from Linear. The task details are provided above.
 9. **Record PR URL** — Write the PR URL to `pr-url.txt` in the workspace root.
 10. **Mark done** — Set `status.md` to exactly `Status: done`.
 
+## Push Failures
+
+If `host-push` fails, **read the error output carefully**. The host runs pre-push hooks (linters, type checks) that may reject the push. Common causes:
+- TypeScript errors — fix them, amend or create a new commit, and push again.
+- Lint errors — fix them and retry.
+- Test failures — fix them and retry.
+
+Do NOT give up on the first push failure. Fix the issue and try again.
+
 ## Testing Requirements
 
-- Always write tests where it makes sense for the changes being made.
-- Always run the project's relevant test suite before committing.
+- Use `host-wavv jest <module>` to run tests on the host. Do NOT run jest directly inside the container.
+- Check `back-end/package.json` scripts to discover available test submodules (e.g., `jest callboards`, `jest auth`, etc.).
+- Only run tests for areas affected by your changes. For example, if you changed callboard files, run `host-wavv jest callboards`, not `host-wavv jest`.
 - Write a summary of test results (test names, pass/fail) to `test-results.txt`.
 - If tests fail and you can fix them, fix them. If not, treat as blocked.
 

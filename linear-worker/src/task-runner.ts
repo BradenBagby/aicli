@@ -243,6 +243,8 @@ export class TaskRunner {
       workspace,
       "--max-iterations",
       String(this.config.maxIterations),
+      "--iteration-timeout",
+      "1200",
       "--model",
       this.config.model,
     ];
@@ -283,9 +285,23 @@ export class TaskRunner {
         result.plan = readFileIfExists(join(workspace, "plan-output.md"));
       }
     } else {
-      result.blockedReason =
-        readFileIfExists(join(workspace, "why_blocked.md")) ??
-        `Ralph exited with code ${exitCode}, status: ${status}`;
+      // Build a useful blocked reason from available sources
+      const whyBlocked = readFileIfExists(join(workspace, "why_blocked.md"));
+      const statusText = readFileIfExists(join(workspace, "status.md")) ?? "";
+
+      if (whyBlocked) {
+        result.blockedReason = whyBlocked;
+      } else if (statusText.includes("timed out")) {
+        result.blockedReason = `Iteration timed out after ${this.config.maxIterations} iterations. Claude may have been stuck on a failing command. Check the logs above for the last action taken.`;
+      } else {
+        // Check if there's partial work (committed but couldn't push/PR)
+        const prUrl = readFileIfExists(join(workspace, "pr-url.txt"));
+        if (prUrl) {
+          result.blockedReason = `Task partially completed. PR may exist at: ${prUrl}. Ralph status: ${status}`;
+        } else {
+          result.blockedReason = `Ralph finished with status: ${status}. No why_blocked.md was written. This usually means Claude was interrupted (timeout or crash) before it could report the blocker. Check logs for details.`;
+        }
+      }
     }
 
     // Clean up prompt file
