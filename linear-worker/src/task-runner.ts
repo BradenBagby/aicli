@@ -74,8 +74,9 @@ function runCommandCapture(
 function runCommandFormatted(
   command: string,
   args: string[],
-  cwd: string
-): Promise<number> {
+  cwd: string,
+  capture = false
+): Promise<{ exitCode: number; stdout: string }> {
   return new Promise((resolve) => {
     const proc = spawn(command, args, {
       cwd,
@@ -84,9 +85,13 @@ function runCommandFormatted(
     });
 
     let buffer = "";
+    const rawChunks: string[] = capture ? [] : [];
 
     proc.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString();
+      const text = chunk.toString();
+      if (capture) rawChunks.push(text);
+
+      buffer += text;
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
 
@@ -114,8 +119,10 @@ function runCommandFormatted(
       process.stderr.write(chunk);
     });
 
-    proc.on("close", (code) => resolve(code ?? 1));
-    proc.on("error", () => resolve(1));
+    proc.on("close", (code) =>
+      resolve({ exitCode: code ?? 1, stdout: rawChunks.join("") })
+    );
+    proc.on("error", () => resolve({ exitCode: 1, stdout: "" }));
   });
 }
 
@@ -227,8 +234,6 @@ export class TaskRunner {
     // Prepare workspace (branch for implement, just files for plan)
     const branch = await this.prepareWorkspace(issue, lane);
 
-    // Build ralph args — plan tasks run in plan mode (read-only, single iteration)
-    const isPlan = lane === "plan" && !retryContext;
     const ralphArgs = [
       "--cli",
       "claude",
@@ -237,60 +242,24 @@ export class TaskRunner {
       "--workspace",
       workspace,
       "--max-iterations",
-      isPlan ? "1" : String(this.config.maxIterations),
+      String(this.config.maxIterations),
       "--model",
       this.config.model,
     ];
-
-    if (isPlan) {
-      ralphArgs.push("--permission-mode", "plan");
-    }
 
     // Stream JSON events so we can see Claude's work in real time
     ralphArgs.push("--", "--output-format", "stream-json", "--verbose");
 
     console.log(
-      `[task-runner] Spawning ralph for ${issue.identifier} (${lane}${isPlan ? ", plan mode" : ""})...`
+      `[task-runner] Spawning ralph for ${issue.identifier} (${lane})...`
     );
     if (lane === "implement") {
       console.log(`[task-runner] Branch: ${branch}`);
     }
     console.log(`[task-runner] Prompt: ${promptPath}`);
 
-    if (isPlan) {
-      // Plan mode: capture stdout as the plan output (Claude can't write files in plan mode)
-      const { exitCode, stdout } = await runCommandCapture(
-        "ralph",
-        ralphArgs,
-        workspace
-      );
-
-      console.log(`[task-runner] Ralph exited with code ${exitCode}`);
-
-      const result: TaskResult = { success: exitCode === 0 };
-
-      if (result.success) {
-        // Extract plan from Claude's stdout (strip ralph log lines)
-        result.plan = extractPlanFromOutput(stdout);
-        if (!result.plan) {
-          result.success = false;
-          result.blockedReason = "Claude produced no plan output";
-        }
-      } else {
-        result.blockedReason = `Ralph exited with code ${exitCode}`;
-      }
-
-      try {
-        unlinkSync(promptPath);
-      } catch {
-        // ignore
-      }
-
-      return result;
-    }
-
-    // Non-plan tasks (implement + plan retries): run normally, read output files
-    const exitCode = await runCommand("ralph", ralphArgs, workspace);
+    // Run with formatted output
+    const { exitCode } = await runCommandFormatted("ralph", ralphArgs, workspace);
 
     console.log(`[task-runner] Ralph exited with code ${exitCode}`);
 
@@ -368,42 +337,4 @@ export class TaskRunner {
       .find(b => b) ?? "master";
     await runCommand("host-checkout", [defaultBranch], workspace);
   }
-}
-
-function extractPlanFromOutput(stdout: string): string | undefined {
-  // Filter out ralph's own log lines and extract Claude's actual output.
-  // Ralph logs start with "Ralph:", "===", "Stopping:", "Status:", "All tasks", "Max iterations", "Loop completed"
-  // Claude's JSON output (--output-format json) wraps the response.
-  const lines = stdout.split("\n");
-  const contentLines: string[] = [];
-
-  for (const line of lines) {
-    // Skip ralph's log lines
-    if (
-      /^(Ralph:|===|Stopping:|Status:|All tasks|Max iterations|Loop completed|Prompt file:|Iteration timeout:|\s*$)/.test(
-        line
-      )
-    ) {
-      continue;
-    }
-
-    // Try to parse as JSON (Claude's --output-format json output)
-    try {
-      const parsed = JSON.parse(line);
-      if (parsed.result) {
-        return parsed.result;
-      }
-      if (parsed.content) {
-        return typeof parsed.content === "string"
-          ? parsed.content
-          : JSON.stringify(parsed.content);
-      }
-    } catch {
-      // Not JSON, include as raw content
-      contentLines.push(line);
-    }
-  }
-
-  const content = contentLines.join("\n").trim();
-  return content || undefined;
 }

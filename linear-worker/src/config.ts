@@ -34,5 +34,6 @@ export function loadConfig(): Config {
       "/tmp/linear-worker-state.json"
     ),
     workspace: optionalEnv("LINEAR_WORKSPACE", "/workspace"),
+    assignmentUserId: process.env.LINEAR_ASSIGNMENT_USER_ID ?? undefined,
   };
 }

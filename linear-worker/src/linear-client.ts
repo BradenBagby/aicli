@@ -23,11 +23,13 @@ const STATE_NAME_MAP: Record<string, keyof StateMap> = {
 export class LinearTaskClient {
   private client: LinearClient;
   private teamId: string;
+  private assignmentUserId?: string;
   private stateMap: StateMap | null = null;
 
   constructor(config: Config) {
     this.client = new LinearClient({ apiKey: config.linearApiKey });
     this.teamId = config.linearTeamId;
+    this.assignmentUserId = config.assignmentUserId;
   }
 
   async initStateMap(): Promise<StateMap> {
@@ -66,29 +68,34 @@ export class LinearTaskClient {
   async pollActionableTasks(): Promise<LinearIssue[]> {
     const stateMap = this.getStateMap();
 
-    const issues = await this.client.issues({
-      filter: {
-        team: { id: { eq: this.teamId } },
-        state: {
-          id: { in: [stateMap.implement, stateMap.createPlan] },
-        },
+    const filter: Record<string, unknown> = {
+      team: { id: { eq: this.teamId } },
+      state: {
+        id: { in: [stateMap.implement, stateMap.createPlan] },
       },
-    });
+    };
+    if (this.assignmentUserId) {
+      filter.assignee = { id: { eq: this.assignmentUserId } };
+    }
 
+    const issues = await this.client.issues({ filter });
     return issues.nodes.map((issue) => this.mapIssue(issue));
   }
 
   async pollBlockedIssues(): Promise<LinearIssue[]> {
     const stateMap = this.getStateMap();
 
-    const issues = await this.client.issues({
-      filter: {
-        team: { id: { eq: this.teamId } },
-        state: {
-          id: { eq: stateMap.blocked },
-        },
+    const filter: Record<string, unknown> = {
+      team: { id: { eq: this.teamId } },
+      state: {
+        id: { eq: stateMap.blocked },
       },
-    });
+    };
+    if (this.assignmentUserId) {
+      filter.assignee = { id: { eq: this.assignmentUserId } };
+    }
+
+    const issues = await this.client.issues({ filter });
 
     return issues.nodes.map((issue) => this.mapIssue(issue));
   }

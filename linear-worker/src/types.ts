@@ -52,4 +52,5 @@ export interface Config {
   model: string;
   stateFile: string;
   workspace: string;
+  assignmentUserId?: string;
 }

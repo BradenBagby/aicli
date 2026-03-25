@@ -111,7 +111,10 @@ async function pollLoop(
     return;
   }
 
-  if (tasks.length === 0) return;
+  if (tasks.length === 0) {
+    console.log("[linear-worker] Polling... no actionable tasks found.");
+    return;
+  }
 
   // Pick the first task we haven't already processed
   for (const task of tasks) {

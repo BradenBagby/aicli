@@ -35,3 +35,4 @@ If you cannot complete the task for any reason:
 - All branches use the `claude/` prefix (already set up for you).
 - Do not modify files unrelated to the task.
 - Keep commits focused and descriptive.
+- Do NOT commit `status.md`, `tasks.md`, `why_blocked.md`, `test-results.txt`, or `pr-url.txt` — these are worker control files, not project code.

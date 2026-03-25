@@ -60,6 +60,7 @@ When working on tasks dispatched by the linear-worker service, your task details
 - **All branches must start with `claude/`** — the host bridge rejects anything else.
 - **One task at a time** — focus entirely on the current task.
 - **Leave high-level comments** — the service posts comments to Linear on your behalf based on status files you write. Keep `why_blocked.md` detailed but concise.
+- **Never commit worker control files** — `status.md`, `tasks.md`, `why_blocked.md`, `test-results.txt`, and `pr-url.txt` are for the linear-worker service only. Do not stage or commit them.
 
 ### Implementation Tasks
 
