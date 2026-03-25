@@ -115,7 +115,12 @@ gather_git_live() {
 
 # ── Jumpstart Cache ──────────────────────────────────────────────────────
 
-JUMPSTART_FILE="$PROJECT_DIR/.ai/jumpstart.json"
+# Store jumpstart cache outside the project directory to avoid polluting repos.
+# Each project gets its own cache file keyed by a hash of the project path.
+_project_hash=$(echo -n "$PROJECT_DIR" | md5sum 2>/dev/null | cut -d' ' -f1 || echo -n "$PROJECT_DIR" | md5 2>/dev/null | cut -d' ' -f1 || echo "default")
+JUMPSTART_DIR="${AI_HOME:-$HOME/.ai}/cache/jumpstart"
+mkdir -p "$JUMPSTART_DIR"
+JUMPSTART_FILE="$JUMPSTART_DIR/${_project_hash}.json"
 
 # Sentinel files — if any of these changed, re-run stack detection
 SENTINEL_FILES=(

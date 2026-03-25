@@ -196,6 +196,11 @@ COPY scripts/ /etc/aih/scripts/
 COPY seed/ /etc/aih/seed/
 COPY docs/ /etc/aih/docs/
 COPY setup.sh /etc/aih/setup.sh
+
+# Copy and build the Linear worker service
+COPY linear-worker/ /etc/aih/linear-worker/
+RUN cd /etc/aih/linear-worker && npm install && npm run build
+
 RUN chown -R ai:ai /etc/aih
 
 # Copy entrypoint script

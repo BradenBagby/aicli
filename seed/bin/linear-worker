@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# linear-worker - Linear task automation service for the Claude team.
+# Polls Linear for tasks on the configured team and dispatches them to Claude
+# via the ralph loop runner. One task at a time, serial execution.
+#
+# Required environment variables:
+#   LINEAR_API_KEY        Linear API key with read/write scope
+#   LINEAR_TEAM_ID        UUID of the Linear team to monitor
+#
+# Optional environment variables:
+#   LINEAR_POLL_INTERVAL  Milliseconds between polls (default: 30000)
+#   LINEAR_MAX_ITERATIONS Max ralph iterations per task (default: 10)
+#   LINEAR_MODEL          Claude model to use (default: sonnet)
+#   LINEAR_WORKSPACE      Workspace path (default: /workspace)
+#
+# Example:
+#   LINEAR_API_KEY=lin_api_xxx LINEAR_TEAM_ID=xxx linear-worker
+#
+
+exec node /etc/aih/linear-worker/dist/index.js "$@"

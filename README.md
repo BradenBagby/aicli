@@ -138,7 +138,7 @@ Notes:
 
 Add this helper to `~/.bashrc`, `~/.zshrc`, or `~/.profile`.
 
-If using bridge mode, also set `AICLI_HOME` to the path where you cloned this repo:
+Set `AICLI_HOME` to the path where you cloned this repo:
 
 ```bash
 export AICLI_HOME="$HOME/path/to/aicli"  # update to your clone path
@@ -168,28 +168,20 @@ sandbox() {
 
   local mode=""
   for arg in "$@"; do
-    case "$arg" in
-      --bridge) mode=bridge ;;
-      --ssh)    mode=ssh ;;
-    esac
+    case "$arg" in --bridge) mode=bridge ;; --ssh) mode=ssh ;; esac
   done
-
-  # Auto-detect if no flag given
   if [[ -z "$mode" ]]; then
-    [[ -S /tmp/aih-bridge.sock ]] && mode=bridge || mode=ssh
+    mode=bridge
   fi
 
-  local extra_mounts=()
-  local bridge_pid=""
+  local extra_mounts=() bridge_pid=""
 
   if [[ "$mode" == "bridge" ]]; then
-    rm -f /tmp/aih-bridge.sock
-    socat UNIX-LISTEN:/tmp/aih-bridge.sock,fork,mode=0666 \
+    socat TCP-LISTEN:57421,fork,reuseaddr \
       EXEC:"bash '$AICLI_HOME/scripts/host-bridge-handler.sh' '$(pwd)'" &
     bridge_pid=$!
     sleep 0.3
     echo "[sandbox] Bridge started (pid $bridge_pid) in $(pwd)"
-    extra_mounts+=(-v /tmp/aih-bridge.sock:/tmp/aih-bridge.sock)
   else
     extra_mounts+=(
       -v "$HOME/.ssh/ai_ed25519:/home/ai/.ssh/id_ed25519:ro"
@@ -199,9 +191,24 @@ sandbox() {
     echo "[sandbox] SSH mode"
   fi
 
+  # Load .env file if it exists in the aicli repo
+  local env_file_args=()
+  if [[ -f "$AICLI_HOME/.env" ]]; then
+    env_file_args+=(--env-file "$AICLI_HOME/.env")
+  fi
+
+  # Determine command: "sandbox --linear" runs the linear-worker service
+  local container_cmd="/bin/bash"
+  for arg in "$@"; do
+    case "$arg" in
+      --linear) container_cmd="linear-worker" ;;
+    esac
+  done
+
   docker network create sandbox >/dev/null 2>&1 || true
   docker run --rm -it \
     --network sandbox \
+    "${env_file_args[@]}" \
     -v "sandbox_home:/home/ai" \
     -v "sandbox_ai:/home/ai/.ai" \
     -v "sandbox_cache:/home/ai/.cache" \
@@ -211,17 +218,15 @@ sandbox() {
     -v "sandbox_cursor:/home/ai/.cursor" \
     -v "sandbox_gemini:/home/ai/.gemini" \
     -v "sandbox_local:/home/ai/.local" \
-    # -v "$HOME/.ai/memory:/home/ai/.ai/memory" \ # Optional: persist memories to host disk
     "${extra_mounts[@]}" \
     -v "$(pwd):/workspace" \
     --workdir /workspace \
     sandbox \
-    /bin/bash
+    $container_cmd
 
   # Cleanup bridge when docker exits
   if [[ -n "$bridge_pid" ]]; then
     kill "$bridge_pid" 2>/dev/null
-    rm -f /tmp/aih-bridge.sock
     echo "[sandbox] Bridge stopped"
   fi
 }

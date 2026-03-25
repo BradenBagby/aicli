@@ -43,6 +43,7 @@ MODEL="${RALPH_MODEL:-}"
 AI_HOME="${AI_HOME:-$HOME/.ai}"
 TASKS_FILE="${WORKSPACE}/tasks.md"
 ITERATION_TIMEOUT="${RALPH_ITERATION_TIMEOUT:-600}"
+PERMISSION_MODE="${RALPH_PERMISSION_MODE:-bypassPermissions}"
 
 # Extra arguments to pass through to the underlying CLI (set after --)
 PASSTHROUGH=()
@@ -59,13 +60,14 @@ Options:
   -s, --status-file <path> Path to status file for done/blocked (default: <workspace>/status.md)
   -m, --model <model>      Model to use (default: claude=haiku, opencode/kilo=minimax/MiniMax-M2.5)
   -t, --iteration-timeout <seconds>  Max seconds for one CLI run (default: 600, 0 disables timeout)
+  --permission-mode <mode> Claude permission mode (default: bypassPermissions). Use "plan" for read-only.
   -h, --help               Show this help
 
 Everything after -- is passed as extra arguments to the underlying CLI (e.g. --model sonnet).
 
 Environment variables (same names with RALPH_ prefix): RALPH_CLI, RALPH_MAX_ITERATIONS,
   RALPH_WORKSPACE, RALPH_PROMPT_FILE, RALPH_STATUS_FILE, RALPH_MODEL,
-  RALPH_ITERATION_TIMEOUT.
+  RALPH_ITERATION_TIMEOUT, RALPH_PERMISSION_MODE.
 EOF
   exit 0
 }
@@ -104,6 +106,10 @@ while [ $# -gt 0 ]; do
       ;;
     -t|--iteration-timeout)
       ITERATION_TIMEOUT="$2"
+      shift 2
+      ;;
+    --permission-mode)
+      PERMISSION_MODE="$2"
       shift 2
       ;;
     -h|--help)
@@ -250,8 +256,8 @@ while true; do
   # Build and run the appropriate CLI
   case "$CLI" in
     claude)
-      # Claude Code: -p for print, permission mode for non-interactive approval (no --workspace; cwd is workspace)
-      ARGS=(-p --permission-mode "bypassPermissions")
+      # Claude Code: -p for print, configurable permission mode (no --workspace; cwd is workspace)
+      ARGS=(-p --permission-mode "$PERMISSION_MODE")
       [ -n "$MODEL" ] && ARGS+=(--model "$MODEL")
       if ! has_output_format_flag "${PASSTHROUGH[@]}"; then
         ARGS+=(--output-format json)

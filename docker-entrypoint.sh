@@ -144,4 +144,7 @@ if [[ -f "$HARNESS_ROOT/setup.sh" ]]; then
     )
 fi
 
+# Ensure harness bins and CLI tools are on PATH for non-interactive commands (e.g. linear-worker)
+export PATH="$HOME/.local/bin:$HOME/.ai/bin:$HOME/.ai/tools/bin:$PATH"
+
 exec "$@"

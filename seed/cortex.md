@@ -49,7 +49,7 @@ Load contracts lazily by trigger:
 
 ## Project Intelligence (Jumpstart)
 
-The SessionStart hook automatically generates and maintains `.ai/jumpstart.json` in the project root. This file contains cached project intelligence:
+The SessionStart hook automatically generates and maintains a jumpstart cache file at `~/.ai/cache/jumpstart/<hash>.json` (keyed by project path). This file contains cached project intelligence:
 
 - **structure** — `tree -JL2` snapshot of the project layout
 - **stack** — detected languages, frameworks, package manager, and key scripts
@@ -58,7 +58,7 @@ The SessionStart hook automatically generates and maintains `.ai/jumpstart.json`
 
 The hook injects this data into session context automatically. The cache is updated incrementally when HEAD moves: sentinel files changing triggers stack re-detection, files added/deleted triggers structure re-scan, otherwise only the commit note updates.
 
-You may read `.ai/jumpstart.json` directly mid-session if you need to reference project structure or stack without re-scanning. Do not manually edit it — the hook manages its lifecycle.
+The cache lives in `~/.ai/cache/jumpstart/` (not in the project directory) to avoid polluting repos. Do not manually edit it — the hook manages its lifecycle.
 
 ## Operating Rules
 

@@ -4,7 +4,7 @@
 # Validates against allowlist and safety rules, runs git in workspace.
 
 WORKSPACE="${1:-.}"
-ALLOWLIST="add checkout reset commit pull push fetch status log diff stash branch show mv rm ls-files pr"
+ALLOWLIST="add checkout reset commit pull push fetch status log diff stash branch show mv rm ls-files clean pr"
 PROTECTED_BRANCHES="main master develop trunk"
 LOG_FILE="${HOME}/.aih-bridge.log"
 BB_CREDS="${HOME}/.config/bitbucket/credentials"
